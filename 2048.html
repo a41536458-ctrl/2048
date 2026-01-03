@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>2048 Hacker Edition - Victory Update</title>
+    <style>
+        :root { --transition-speed: 0.15s; }
+        body {
+            background-color: #faf8ef;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: "Clear Sans", Arial, sans-serif;
+            margin: 0;
+            overflow: hidden;
+        }
+        h1 { font-size: 60px; margin: 10px; color: #776e65; }
+        .score-container {
+            background: #bbada0;
+            padding: 10px 25px;
+            border-radius: 5px;
+            color: white;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        #game-container {
+            width: 400px;
+            height: 400px;
+            background-color: #bbada0;
+            border-radius: 6px;
+            padding: 15px;
+            box-sizing: border-box;
+            position: relative;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-gap: 15px;
+        }
+        .cell {
+            width: 80px;
+            height: 80px;
+            background: rgba(238, 228, 218, 0.35);
+            border-radius: 3px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 35px;
+            font-weight: bold;
+            color: #776e65;
+            transition: all var(--transition-speed) ease-in-out;
+        }
+
+        /* Цвета плиток */
+        .tile-2 { background: #eee4da; }
+        .tile-4 { background: #ede0c8; }
+        .tile-8 { background: #f2b179; color: #f9f6f2; }
+        .tile-16 { background: #f59563; color: #f9f6f2; }
+        .tile-32 { background: #f67c5f; color: #f9f6f2; }
+        .tile-64 { background: #f65e3b; color: #f9f6f2; }
+        .tile-128 { background: #edcf72; color: #f9f6f2; font-size: 30px; }
+        .tile-256 { background: #edcc61; color: #f9f6f2; font-size: 30px; box-shadow: 0 0 10px rgba(237, 204, 97, 0.5); }
+        .tile-512 { background: #edc850; color: #f9f6f2; font-size: 30px; }
+        .tile-1024 { background: #edc53f; color: #f9f6f2; font-size: 25px; }
+        .tile-2048 { background: #edc22e; color: #f9f6f2; font-size: 25px; box-shadow: 0 0 20px #edc22e; }
+        
+        .pop { transform: scale(1.15); }
+
+        /* Окно победы / проигрыша */
+        #message-overlay {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(238, 228, 218, 0.73);
+            z-index: 50;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-radius: 6px;
+        }
+        #message-overlay h2 { font-size: 60px; color: #776e65; margin: 0; }
+
+        /* Читы Меню */
+        #cheat-menu {
+            display: none;
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.3);
+            z-index: 100;
+            border: 3px solid #776e65;
+        }
+        .cheat-option { margin: 12px 0; display: flex; align-items: center; gap: 10px; font-weight: bold; color: #776e65; }
+        .close-btn { 
+            background: #8f7a66; color: white; border: none; padding: 10px; 
+            border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>2048</h1>
+    <div class="score-container">Счет: <span id="score">0</span></div>
+    
+    <div id="game-container">
+        <div id="message-overlay">
+            <h2 id="status-text">Победа!</h2>
+            <button class="close-btn" onclick="location.reload()" style="width: auto; padding: 10px 20px;">Играть еще</button>
+        </div>
+        <div class="grid" id="grid"></div>
+    </div>
+
+    <div id="cheat-menu">
+        <h2>Hacker Menu 🛠️</h2>
+        <label class="cheat-option"><input type="checkbox" id="superball"> SuperBall (Слияние сразу 256)</label>
+        <label class="cheat-option"><input type="checkbox" id="speed"> Speed (Без анимаций)</label>
+        <label class="cheat-option"><input type="checkbox" id="god"> God Mode (Бессмертие)</label>
+        <button class="close-btn" onclick="toggleMenu()">Вернуться в игру</button>
+    </div>
+
+    <script>
+        const gridDisplay = document.getElementById('grid');
+        const scoreDisplay = document.getElementById('score');
+        const cheatMenu = document.getElementById('cheat-menu');
+        const overlay = document.getElementById('message-overlay');
+        const statusText = document.getElementById('status-text');
+        
+        const width = 4;
+        let squares = [];
+        let score = 0;
+        let comboKeys = "";
+        let isGameOver = false;
+
+        const cheats = { superball: false, speed: false, god: false };
+
+        function createBoard() {
+            gridDisplay.innerHTML = '';
+            squares = [];
+            for (let i = 0; i < width * width; i++) {
+                let square = document.createElement('div');
+                square.classList.add('cell');
+                gridDisplay.appendChild(square);
+                squares.push(square);
+            }
+            generate();
+            generate();
+        }
+
+        function generate() {
+            let emptySquares = squares.filter(s => s.innerHTML === '');
+            if (emptySquares.length > 0) {
+                let randomSquare = emptySquares[Math.floor(Math.random() * emptySquares.length)];
+                randomSquare.innerHTML = Math.random() > 0.1 ? 2 : 4;
+                
+                // Анимация появления
+                randomSquare.classList.add('pop');
+                setTimeout(() => randomSquare.classList.remove('pop'), 200);
+                
+                updateStyles();
+            }
+            checkStatus();
+        }
+
+        function updateStyles() {
+            squares.forEach(square => {
+                let val = square.innerHTML;
+                square.className = 'cell' + (val ? ' tile-' + val : '');
+            });
+            document.documentElement.style.setProperty('--transition-speed', cheats.speed ? '0s' : '0.15s');
+        }
+
+        function handleMove(direction) {
+            if (isGameOver) return;
+            let prevBoard = squares.map(s => s.innerHTML).join(',');
+
+            if (direction === 'left') slide(true);
+            if (direction === 'right') slide(false);
+            if (direction === 'up') slideVertical(true);
+            if (direction === 'down') slideVertical(false);
+
+            if (prevBoard !== squares.map(s => s.innerHTML).join(',')) {
+                generate();
+            }
+        }
+
+        function combine(line) {
+            let filtered = line.filter(num => num);
+            for (let i = 0; i < filtered.length - 1; i++) {
+                if (filtered[i] === filtered[i+1]) {
+                    // Эффект Чита SuperBall
+                    let newValue = cheats.superball ? 256 : parseInt(filtered[i]) * 2;
+                    filtered[i] = newValue;
+                    filtered[i+1] = '';
+                    score += newValue;
+                    scoreDisplay.innerHTML = score;
+
+                    // Проверка на 2048
+                    if (newValue >= 2048) winGame();
+                }
+            }
+            let result = filtered.filter(num => num);
+            while (result.length < 4) result.push('');
+            return result;
+        }
+
+        function slide(isLeft) {
+            for (let i = 0; i < 16; i += 4) {
+                let row = [squares[i].innerHTML, squares[i+1].innerHTML, squares[i+2].innerHTML, squares[i+3].innerHTML];
+                let processed = combine(isLeft ? row : row.reverse());
+                if (!isLeft) processed.reverse();
+                for (let j = 0; j < 4; j++) squares[i+j].innerHTML = processed[j];
+            }
+        }
+
+        function slideVertical(isUp) {
+            for (let i = 0; i < 4; i++) {
+                let col = [squares[i].innerHTML, squares[i+width].innerHTML, squares[i+width*2].innerHTML, squares[i+width*3].innerHTML];
+                let processed = combine(isUp ? col : col.reverse());
+                if (!isUp) processed.reverse();
+                for (let j = 0; j < 4; j++) squares[i + j*width].innerHTML = processed[j];
+            }
+        }
+
+        function winGame() {
+            isGameOver = true;
+            statusText.innerHTML = "Победа! 🎉";
+            overlay.style.display = 'flex';
+        }
+
+        function checkStatus() {
+            let empty = squares.filter(s => s.innerHTML === '').length;
+            if (empty === 0 && !cheats.god) {
+                // Тут можно добавить проверку на возможные ходы, но для краткости — проигрыш
+                isGameOver = true;
+                statusText.innerHTML = "Конец игры!";
+                overlay.style.display = 'flex';
+            }
+        }
+
+        function toggleMenu() {
+            cheatMenu.style.display = cheatMenu.style.display === 'block' ? 'none' : 'block';
+        }
+
+        document.addEventListener('keyup', (e) => {
+            if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+                handleMove(e.key.replace('Arrow', '').toLowerCase());
+            }
+
+            comboKeys += e.key;
+            if (comboKeys.includes("2048")) {
+                toggleMenu();
+                comboKeys = "";
+            }
+            if (comboKeys.length > 10) comboKeys = "";
+        });
+
+        document.getElementById('superball').onchange = (e) => cheats.superball = e.target.checked;
+        document.getElementById('speed').onchange = (e) => cheats.speed = e.target.checked;
+        document.getElementById('god').onchange = (e) => cheats.god = e.target.checked;
+
+        createBoard();
+    </script>
+</body>
+</html>
